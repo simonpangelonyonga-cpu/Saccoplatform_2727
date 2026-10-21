@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, SafeAreaView, StatusBar, Alert, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, StatusBar, Alert, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('savings'); // 'savings' | 'loans' | 'analytics'
@@ -87,7 +89,7 @@ export default function App() {
       id: Date.now().toString(),
       borrower: borrowerName.trim(),
       amount: amount,
-      interestRate: 10, // Default 10% interest rate
+      interestRate: 10,
       status: 'Active',
     };
 
@@ -97,6 +99,34 @@ export default function App() {
     setBorrowerName('');
     setLoanAmount('');
     Alert.alert('Loan Approved', `Issued ${amount.toLocaleString()} UGX loan to ${borrowerName.trim()}`);
+  };
+
+  // Export Ledger to CSV Function
+  const exportLedgerToCSV = async () => {
+    try {
+      let csvContent = "Member Name,Shares,Savings Balance (UGX)\n";
+      members.forEach((m) => {
+        csvContent += `"${m.name}",${m.shares},${m.balance}\n`;
+      });
+
+      csvContent += "\nBorrower Name,Loan Amount (UGX),Interest Rate (%),Repayment (UGX)\n";
+      loans.forEach((l) => {
+        const totalRepay = l.amount + (l.amount * l.interestRate) / 100;
+        csvContent += `"${l.borrower}",${l.amount},${l.interestRate},${totalRepay}\n`;
+      });
+
+      const fileUri = FileSystem.documentDirectory + 'Sacco_Ledger_Report.csv';
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri);
+      } else {
+        Alert.alert('Exported', `CSV Report generated at: ${fileUri}`);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to export CSV ledger file');
+      console.error(e);
+    }
   };
 
   const totalSavings = members.reduce((sum, item) => sum + item.balance, 0);
@@ -178,7 +208,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {/* TAB 3: ANALYTICS / OVERVIEW */}
+      {/* TAB 3: ANALYTICS & EXPORT */}
       {activeTab === 'analytics' && (
         <View style={styles.contentContainer}>
           <View style={[styles.statBox, { backgroundColor: '#E6FFFA' }]}>
@@ -195,6 +225,10 @@ export default function App() {
             <Text style={styles.statLabel}>Available Cash Pool</Text>
             <Text style={[styles.statValue, { color: '#2B6CB0' }]}>{(totalSavings - totalLoans).toLocaleString()} UGX</Text>
           </View>
+
+          <TouchableOpacity style={[styles.button, { backgroundColor: '#38A169', marginTop: 10 }]} onPress={exportLedgerToCSV}>
+            <Text style={styles.buttonText}>📥 Export Ledger to CSV / WhatsApp</Text>
+          </TouchableOpacity>
         </View>
       )}
     </SafeAreaView>
@@ -221,7 +255,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#2D3748' },
   cardSub: { fontSize: 13, color: '#718096', marginTop: 2 },
   cardHighlight: { fontSize: 16, fontWeight: 'bold', color: '#2F855A' },
-  statBox: { padding: 20, borderRadius: 12, marginBottom: 16, alignItems: 'center', elevation: 1 },
+  statBox: { padding: 16, borderRadius: 12, marginBottom: 12, alignItems: 'center', elevation: 1 },
   statLabel: { fontSize: 14, color: '#4A5568', fontWeight: '600' },
-  statValue: { fontSize: 26, fontWeight: 'bold', marginTop: 6 },
+  statValue: { fontSize: 24, fontWeight: 'bold', marginTop: 4 },
 });
